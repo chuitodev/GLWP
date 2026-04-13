@@ -1,0 +1,11 @@
+services:
+  invitation:
+    build: .
+    container_name: glwp-invitation-local
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data

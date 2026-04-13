@@ -1,0 +1,3 @@
+{"groupName":"Familia Garcia Lopez","submittedAt":"2026-04-13T03:46:43.857Z","guests":[{"id":"guest-1","name":"Ana Garcia","attendance":"no","meal":""},{"id":"guest-2","name":"Luis Lopez","attendance":"yes","meal":"Estandar"}],"note":""}
+{"groupName":"Familia Garcia Lopez","submittedAt":"2026-04-13T03:48:43.797Z","guests":[{"id":"guest-1","name":"Ana Garcia","attendance":"yes","meal":"Estandar"},{"id":"guest-2","name":"Luis Lopez","attendance":"yes","meal":"Vegano"}],"note":""}
+{"groupName":"Familia Garcia Lopez","submittedAt":"2026-04-13T03:51:14.050Z","guests":[{"id":"guest-1","name":"Ana Garcia","attendance":"yes","meal":"Estandar"},{"id":"guest-2","name":"Luis Lopez","attendance":"no","meal":""}],"note":""}
