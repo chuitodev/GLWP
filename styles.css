@@ -1,14 +1,21 @@
 :root {
   --bg: #fbf5ef;
   --bg-strong: #f1e4d6;
+  --bg-end: #efe1d2;
   --surface: rgba(255, 252, 247, 0.74);
   --surface-strong: rgba(255, 249, 242, 0.92);
   --line: rgba(92, 64, 51, 0.14);
   --text: #34231c;
   --muted: #70554a;
+  --title: #34231c;
   --accent: #b4664a;
   --accent-soft: rgba(180, 102, 74, 0.12);
+  --accent-contrast: #fff9f4;
+  --hero-text: #fff8f1;
   --success: #2d6b4b;
+  --hero-gradient-start: #4d352c;
+  --hero-gradient-mid: #a66f57;
+  --hero-gradient-end: #f3e3d2;
   --shadow: 0 28px 60px rgba(73, 44, 33, 0.12);
   --radius-xl: 32px;
   --radius-lg: 24px;
@@ -33,7 +40,7 @@ body {
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 32%),
     radial-gradient(circle at 85% 15%, rgba(212, 173, 152, 0.24), transparent 18%),
-    linear-gradient(180deg, #fefaf5 0%, var(--bg) 45%, #efe1d2 100%);
+    linear-gradient(180deg, #fefaf5 0%, var(--bg) 45%, var(--bg-end) 100%);
 }
 
 button,
@@ -93,7 +100,7 @@ textarea {
     linear-gradient(140deg, rgba(77, 53, 44, 0.78), rgba(77, 53, 44, 0.18)),
     linear-gradient(180deg, rgba(255, 247, 240, 0.1), rgba(255, 247, 240, 0.36)),
     radial-gradient(circle at 20% 20%, rgba(255, 222, 193, 0.42), transparent 24%),
-    linear-gradient(135deg, #4d352c 0%, #a66f57 45%, #f3e3d2 100%);
+    linear-gradient(135deg, var(--hero-gradient-start) 0%, var(--hero-gradient-mid) 45%, var(--hero-gradient-end) 100%);
   box-shadow: var(--shadow);
 }
 
@@ -152,13 +159,13 @@ textarea {
   font-family: var(--serif);
   font-size: clamp(3.3rem, 12vw, 7rem);
   line-height: 0.92;
-  color: #fff8f1;
+  color: var(--hero-text);
 }
 
 .hero p,
 .hero li,
 .hero span {
-  color: rgba(255, 248, 241, 0.92);
+  color: var(--hero-text);
 }
 
 .hero__lede {
@@ -216,13 +223,15 @@ textarea {
 }
 
 .button {
-  background: #fff7ee;
-  color: #56382d;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: 0 16px 28px rgba(73, 44, 33, 0.12);
+  font-weight: 700;
 }
 
 .button--ghost {
   background: transparent;
-  color: #fff7ee;
+  color: var(--hero-text);
   border-color: rgba(255, 247, 238, 0.32);
 }
 
@@ -280,6 +289,7 @@ textarea {
   font-family: var(--serif);
   font-size: clamp(2rem, 7vw, 3rem);
   line-height: 0.98;
+  color: var(--title);
 }
 
 .section__header p {
@@ -400,6 +410,8 @@ textarea {
   gap: 0.8rem;
   padding: 1.2rem;
   border-radius: 22px;
+  min-height: 188px;
+  align-content: space-between;
 }
 
 .registry-list {
@@ -410,6 +422,7 @@ textarea {
   gap: 0.85rem;
   padding: 1.15rem;
   border-radius: 22px;
+  align-content: start;
 }
 
 .final-notes {
@@ -577,7 +590,7 @@ textarea {
   border-radius: 999px;
   background: rgba(255, 247, 238, 0.14);
   border: 1px solid rgba(255, 247, 238, 0.32);
-  color: #fff7ef;
+  color: var(--hero-text);
   letter-spacing: 0.24em;
   text-transform: uppercase;
   font-size: 0.76rem;
@@ -669,18 +682,30 @@ textarea {
 }
 
 .parents-card__names {
+  display: grid;
+  gap: 0.35rem;
   font-family: var(--serif);
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   line-height: 1.05;
+  color: var(--title);
 }
 
 .gallery--photos {
   margin-top: 0.25rem;
 }
 
+.gallery--photos-featured {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .gallery__photo {
-  min-height: 220px;
+  min-height: 260px;
+  aspect-ratio: 4 / 3;
   border-radius: 22px;
+}
+
+.gallery--photos-featured .gallery__photo--3 {
+  grid-column: 1 / -1;
 }
 
 .timeline-item__content {
@@ -723,6 +748,7 @@ textarea {
   flex-wrap: wrap;
   align-content: start;
   gap: 0.85rem;
+  justify-content: flex-start;
 }
 
 .dress-code__content {
@@ -741,10 +767,29 @@ textarea {
 }
 
 .rsvp-person__controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.85rem;
-  align-items: center;
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+
+.rsvp-person__decision {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rsvp-dietary {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.rsvp-dietary.is-hidden {
+  display: none;
+}
+
+.rsvp-dietary__question {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .choice-group {
@@ -772,7 +817,7 @@ textarea {
 .choice-button.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff9f4;
+  color: var(--accent-contrast);
 }
 
 .choice-button--meal {
@@ -788,10 +833,33 @@ textarea {
   justify-items: start;
 }
 
+.rsvp-status__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 102, 74, 0.18);
+  background: rgba(180, 102, 74, 0.08);
+  color: var(--accent);
+}
+
+.status-strip--confirmed .rsvp-status__badge {
+  border-color: rgba(45, 107, 75, 0.18);
+  background: rgba(45, 107, 75, 0.12);
+  color: var(--success);
+}
+
 .rsvp-actions--stack {
   display: grid;
   gap: 0.75rem;
   justify-content: start;
+}
+
+.button--submit {
+  min-width: 250px;
+  min-height: 52px;
 }
 
 .feedback--success {
@@ -809,11 +877,33 @@ textarea {
   }
 
   .rsvp-person__controls {
-    flex-direction: column;
     align-items: stretch;
   }
 
   .choice-group {
     width: 100%;
+  }
+}
+
+.lodging-card__content,
+.registry-item__details {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.lodging-card__action {
+  margin-top: 0.35rem;
+}
+
+.registry-item__detail {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+@media (min-width: 860px) {
+  .gallery--photos-featured .gallery__photo--3 {
+    grid-column: 1 / -1;
+    width: min(100%, 38rem);
+    justify-self: center;
   }
 }

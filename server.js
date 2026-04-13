@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = Number(process.env.PORT || 8080);
 const DATA_DIR = path.join(__dirname, "data");
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 
 await loadLocalEnv(path.join(__dirname, ".env"));
+const PORT = Number(process.env.PORT || 8080);
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -94,6 +94,7 @@ async function loadLocalEnv(envPath) {
 }
 
 function buildConfig() {
+  const dressLinkCount = Number(env("DRESS_LINK_COUNT", "1"));
   const timelineItems = parseCountedItems("TIMELINE", Number(env("TIMELINE_COUNT", "3")), (index) => ({
     id: `timeline-${index}`,
     label: env(`TIMELINE_${index}_LABEL`, ""),
@@ -115,6 +116,7 @@ function buildConfig() {
     id: `registry-${index}`,
     title: env(`REGISTRY_${index}_TITLE`, ""),
     description: env(`REGISTRY_${index}_DESCRIPTION`, ""),
+    details: splitList(env(`REGISTRY_${index}_DETAILS`, ""), "|"),
     actionLabel: env(`REGISTRY_${index}_ACTION_LABEL`, ""),
     actionUrl: env(`REGISTRY_${index}_ACTION_URL`, ""),
     copyValue: env(`REGISTRY_${index}_COPY_VALUE`, ""),
@@ -129,8 +131,8 @@ function buildConfig() {
     name: env(`GUEST_${index}_NAME`, `Invitado ${index}`),
   }));
 
-  const dressLinks = [1, 2]
-    .map((index) => ({
+  const dressLinks = parseCountedItems("DRESS_LINK", dressLinkCount, (index) => ({
+      id: `dress-link-${index}`,
       label: env(`DRESS_LINK_${index}_LABEL`, ""),
       url: env(`DRESS_LINK_${index}_URL`, ""),
     }))
@@ -147,6 +149,25 @@ function buildConfig() {
   return {
     brandLabel: env("BRAND_LABEL", "GLWP INVITATION SYSTEM"),
     topbarActionLabel: env("TOPBAR_ACTION_LABEL", "Ir a RSVP"),
+    theme: {
+      background: env("THEME_COLOR_BACKGROUND", "#fbf5ef"),
+      backgroundStrong: env("THEME_COLOR_BACKGROUND_STRONG", "#f1e4d6"),
+      backgroundEnd: env("THEME_COLOR_BACKGROUND_END", "#efe1d2"),
+      surface: env("THEME_COLOR_SURFACE", "rgba(255, 252, 247, 0.74)"),
+      surfaceStrong: env("THEME_COLOR_SURFACE_STRONG", "rgba(255, 249, 242, 0.92)"),
+      border: env("THEME_COLOR_BORDER", "rgba(92, 64, 51, 0.14)"),
+      text: env("THEME_COLOR_TEXT", "#34231c"),
+      textMuted: env("THEME_COLOR_TEXT_MUTED", "#70554a"),
+      title: env("THEME_COLOR_TITLE", "#34231c"),
+      primary: env("THEME_COLOR_PRIMARY", "#b4664a"),
+      primarySoft: env("THEME_COLOR_PRIMARY_SOFT", "rgba(180, 102, 74, 0.12)"),
+      primaryText: env("THEME_COLOR_PRIMARY_TEXT", "#fff9f4"),
+      heroText: env("THEME_COLOR_HERO_TEXT", "#fff8f1"),
+      success: env("THEME_COLOR_SUCCESS", "#2d6b4b"),
+      heroGradientStart: env("THEME_HERO_GRADIENT_START", "#4d352c"),
+      heroGradientMid: env("THEME_HERO_GRADIENT_MID", "#a66f57"),
+      heroGradientEnd: env("THEME_HERO_GRADIENT_END", "#f3e3d2"),
+    },
     couple: {
       bride: env("BRIDE_NAME", "Camila"),
       groom: env("GROOM_NAME", "Julian"),
@@ -169,9 +190,9 @@ function buildConfig() {
       title: env("PARENTS_SECTION_TITLE", "Nuestros padres"),
       text: env("PARENTS_SECTION_TEXT", ""),
       groomTitle: env("GROOM_PARENTS_TITLE", "Padres del novio"),
-      groomNames: env("GROOM_PARENTS_NAMES", ""),
+      groomNames: splitList(env("GROOM_PARENTS_NAMES", ""), "|"),
       brideTitle: env("BRIDE_PARENTS_TITLE", "Padres de la novia"),
-      brideNames: env("BRIDE_PARENTS_NAMES", ""),
+      brideNames: splitList(env("BRIDE_PARENTS_NAMES", ""), "|"),
       galleryPhotos,
     },
     timeline: {
@@ -222,7 +243,14 @@ function buildConfig() {
         "Confirma por grupo. Las respuestas se guardan en la carpeta data del proyecto."
       ),
       groupName: env("RSVP_GROUP_NAME", "Familia invitada"),
-      mealOptions: env("RSVP_MEAL_OPTIONS", "Estandar|Vegetariano|Vegano")
+      dietaryQuestion: env(
+        "RSVP_DIETARY_QUESTION",
+        "Tiene alguna restriccion alimentaria?"
+      ),
+      dietaryOptions: env(
+        "RSVP_DIETARY_OPTIONS",
+        env("RSVP_MEAL_OPTIONS", "No, ninguna|Si, vegetariano|Si, vegano")
+      )
         .split("|")
         .map((value) => value.trim())
         .filter(Boolean),
@@ -237,6 +265,13 @@ function parseCountedItems(prefix, count, mapper) {
     items.push(mapper(index));
   }
   return items;
+}
+
+function splitList(value, separator = "|") {
+  return value
+    .split(separator)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function env(key, fallback = "") {
@@ -265,7 +300,9 @@ async function persistRsvp(payload) {
     ...safePayload.guests.map(
       (guest) =>
         `- ${guest.name}: ${guest.attendance === "yes" ? "Asistira" : "No asistira"}${
-          guest.attendance === "yes" ? ` | Menu: ${guest.meal || "Sin definir"}` : ""
+          guest.attendance === "yes"
+            ? ` | Restriccion: ${guest.dietaryRestriction || guest.meal || "Sin definir"}`
+            : ""
         }`
     ),
     safePayload.note ? `Nota: ${safePayload.note}` : "",

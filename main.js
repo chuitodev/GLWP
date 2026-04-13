@@ -28,7 +28,7 @@ async function bootstrap() {
       id: guest.id,
       name: guest.name,
       attendance: "",
-      meal: state.config.rsvp.mealOptions[0] || "",
+      dietaryRestriction: state.config.rsvp.dietaryOptions[0] || "",
     }));
     state.loading = false;
     render();
@@ -47,11 +47,46 @@ function normalizeConfig(config) {
 
   return {
     ...config,
+    parents: {
+      ...config.parents,
+      groomNames: Array.isArray(config.parents.groomNames) ? config.parents.groomNames : [],
+      brideNames: Array.isArray(config.parents.brideNames) ? config.parents.brideNames : [],
+    },
     couple: {
       ...config.couple,
       display: displayName,
     },
   };
+}
+
+function applyTheme(theme) {
+  if (!theme) return;
+
+  const vars = {
+    "--bg": theme.background,
+    "--bg-strong": theme.backgroundStrong,
+    "--bg-end": theme.backgroundEnd,
+    "--surface": theme.surface,
+    "--surface-strong": theme.surfaceStrong,
+    "--line": theme.border,
+    "--text": theme.text,
+    "--muted": theme.textMuted,
+    "--title": theme.title,
+    "--accent": theme.primary,
+    "--accent-soft": theme.primarySoft,
+    "--accent-contrast": theme.primaryText,
+    "--hero-text": theme.heroText,
+    "--success": theme.success,
+    "--hero-gradient-start": theme.heroGradientStart,
+    "--hero-gradient-mid": theme.heroGradientMid,
+    "--hero-gradient-end": theme.heroGradientEnd,
+  };
+
+  Object.entries(vars).forEach(([key, value]) => {
+    if (value) {
+      document.documentElement.style.setProperty(key, value);
+    }
+  });
 }
 
 function startCountdown() {
@@ -107,6 +142,7 @@ function render() {
   }
 
   const config = state.config;
+  applyTheme(config.theme);
   const brandLabel = document.querySelector("#brand-label");
   const topbarAction = document.querySelector("#topbar-action");
   if (brandLabel) brandLabel.textContent = config.brandLabel;
@@ -187,6 +223,9 @@ function renderHero(config) {
 }
 
 function renderParents(config) {
+  const galleryClass =
+    config.parents.galleryPhotos.length >= 3 ? "gallery gallery--photos gallery--photos-featured" : "gallery gallery--photos";
+
   return `
     <section class="section" id="familia">
       <div class="section__header section__header--center">
@@ -201,16 +240,20 @@ function renderParents(config) {
       <div class="parents-layout">
         <article class="parents-card">
           <span class="parents-card__label">${escapeHtml(config.parents.groomTitle)}</span>
-          <div class="parents-card__names">${escapeHtml(config.parents.groomNames)}</div>
+          <div class="parents-card__names">
+            ${config.parents.groomNames.map((name) => `<span>${escapeHtml(name)}</span>`).join("")}
+          </div>
         </article>
         <article class="parents-card">
           <span class="parents-card__label">${escapeHtml(config.parents.brideTitle)}</span>
-          <div class="parents-card__names">${escapeHtml(config.parents.brideNames)}</div>
+          <div class="parents-card__names">
+            ${config.parents.brideNames.map((name) => `<span>${escapeHtml(name)}</span>`).join("")}
+          </div>
         </article>
       </div>
-      <div class="gallery gallery--photos">
+      <div class="${galleryClass}">
         ${config.parents.galleryPhotos
-          .map((photo) => renderPhoto(photo.src, photo.alt, "gallery__photo"))
+          .map((photo, index) => renderPhoto(photo.src, photo.alt, `gallery__photo gallery__photo--${index + 1}`))
           .join("")}
       </div>
     </section>
@@ -251,6 +294,8 @@ function renderTimeline(config) {
 }
 
 function renderDressCode(config) {
+  const inspirationLink = config.dressCode.links[0];
+
   return `
     <section class="section" id="dress-code">
       <div class="section__header">
@@ -267,17 +312,17 @@ function renderDressCode(config) {
               .join("")}
           </div>
         </div>
-        <div class="link-buttons">
-          ${config.dressCode.links
-            .map(
-              (link) => `
-                <a class="button button--secondary" href="${escapeHtml(link.url)}" target="_blank" rel="noreferrer">
-                  ${escapeHtml(link.label)}
+        ${
+          inspirationLink
+            ? `
+              <div class="link-buttons">
+                <a class="button button--secondary" href="${escapeHtml(inspirationLink.url)}" target="_blank" rel="noreferrer">
+                  ${escapeHtml(inspirationLink.label)}
                 </a>
-              `
-            )
-            .join("")}
-        </div>
+              </div>
+            `
+            : ""
+        }
       </div>
     </section>
   `;
@@ -296,9 +341,11 @@ function renderLodging(config) {
           .map(
             (item) => `
               <article class="lodging-card">
-                <span class="eyebrow">${escapeHtml(item.minutes)}</span>
-                <span class="lodging-card__name">${escapeHtml(item.name)}</span>
-                <div>${escapeHtml(item.address)}</div>
+                <div class="lodging-card__content">
+                  <span class="eyebrow">${escapeHtml(item.minutes)}</span>
+                  <span class="lodging-card__name">${escapeHtml(item.name)}</span>
+                  <div>${escapeHtml(item.address)}</div>
+                </div>
                 ${
                   item.mapsUrl
                     ? `<a class="lodging-card__action button-link" href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noreferrer">Ver ubicacion</a>`
@@ -335,6 +382,17 @@ function renderRegistry(config) {
               <article class="registry-item">
                 <span class="registry-item__title">${escapeHtml(item.title)}</span>
                 <div>${escapeHtml(item.description)}</div>
+                ${
+                  item.details.length
+                    ? `
+                      <div class="registry-item__details">
+                        ${item.details
+                          .map((detail) => `<div class="registry-item__detail">${escapeHtml(detail)}</div>`)
+                          .join("")}
+                      </div>
+                    `
+                    : ""
+                }
                 ${action}
               </article>
             `;
@@ -360,6 +418,9 @@ function renderNotes(config) {
 }
 
 function renderRsvp(config) {
+  const statusLabel = state.rsvp.submitted ? "Confirmacion enviada" : "Pendiente";
+  const statusClass = state.rsvp.submitted ? "status-strip status-strip--confirmed" : "status-strip";
+
   return `
     <section class="section rsvp" id="rsvp">
       <div class="section__header">
@@ -367,7 +428,7 @@ function renderRsvp(config) {
         <h2>${escapeHtml(config.rsvp.title)}</h2>
         <p>${escapeHtml(config.rsvp.description)}</p>
       </div>
-      <div class="status-strip">
+      <div class="${statusClass}">
         <div>
           <div class="eyebrow">Grupo invitado</div>
           <strong>${escapeHtml(config.rsvp.groupName)}</strong>
@@ -375,7 +436,7 @@ function renderRsvp(config) {
         </div>
         <div class="rsvp-status">
           <div class="eyebrow">Estado</div>
-          <strong>${state.rsvp.submitted ? "Guardado" : "Pendiente"}</strong>
+          <strong class="rsvp-status__badge">${escapeHtml(statusLabel)}</strong>
         </div>
       </div>
       <form id="rsvp-form" class="rsvp-form">
@@ -389,18 +450,23 @@ function renderRsvp(config) {
                     <span class="eyebrow">Confirmacion individual</span>
                   </div>
                   <div class="rsvp-person__controls">
-                    <div class="choice-group" role="group" aria-label="Asistencia de ${escapeHtml(guest.name)}">
-                      <button class="choice-button ${guest.attendance === "yes" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="yes">Asistire</button>
-                      <button class="choice-button ${guest.attendance === "no" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="no">No podre asistir</button>
-                    </div>
-                    <div class="choice-group meal-group ${guest.attendance === "yes" ? "" : "is-hidden"}" role="group" aria-label="Menu de ${escapeHtml(guest.name)}">
-                      ${config.rsvp.mealOptions
-                        .map(
-                          (meal) => `
-                            <button class="choice-button choice-button--meal ${guest.meal === meal ? "is-active" : ""}" type="button" data-guest-action="meal" data-guest-id="${escapeHtml(guest.id)}" data-value="${escapeHtml(meal)}">${escapeHtml(meal)}</button>
-                          `
-                        )
-                        .join("")}
+                    <div class="rsvp-person__decision">
+                      <div class="choice-group" role="group" aria-label="Asistencia de ${escapeHtml(guest.name)}">
+                        <button class="choice-button ${guest.attendance === "yes" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="yes">Asistire</button>
+                        <button class="choice-button ${guest.attendance === "no" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="no">No podre asistir</button>
+                      </div>
+                      <div class="rsvp-dietary ${guest.attendance === "yes" ? "" : "is-hidden"}">
+                        <div class="rsvp-dietary__question">${escapeHtml(config.rsvp.dietaryQuestion)}</div>
+                        <div class="choice-group meal-group" role="group" aria-label="Restriccion alimentaria de ${escapeHtml(guest.name)}">
+                          ${config.rsvp.dietaryOptions
+                            .map(
+                              (option) => `
+                                <button class="choice-button choice-button--meal ${guest.dietaryRestriction === option ? "is-active" : ""}" type="button" data-guest-action="dietary" data-guest-id="${escapeHtml(guest.id)}" data-value="${escapeHtml(option)}">${escapeHtml(option)}</button>
+                              `
+                            )
+                            .join("")}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -409,7 +475,7 @@ function renderRsvp(config) {
             .join("")}
         </div>
         <div class="rsvp-actions rsvp-actions--stack">
-          <button class="button" type="submit">Enviar confirmacion</button>
+          <button class="button button--submit" type="submit">Enviar confirmacion</button>
           <div class="feedback ${state.rsvp.submitted ? "feedback--success" : ""}">${escapeHtml(state.rsvp.message)}</div>
         </div>
       </form>
@@ -448,19 +514,20 @@ function bindRsvpEvents() {
 
       if (action === "attendance") {
         guest.attendance = value;
-        if (value === "yes" && !guest.meal) {
-          guest.meal = state.config.rsvp.mealOptions[0] || "";
+        if (value === "yes" && !guest.dietaryRestriction) {
+          guest.dietaryRestriction = state.config.rsvp.dietaryOptions[0] || "";
         }
         if (value === "no") {
-          guest.meal = "";
+          guest.dietaryRestriction = "";
         }
       }
 
-      if (action === "meal") {
-        guest.meal = value;
+      if (action === "dietary") {
+        guest.dietaryRestriction = value;
       }
 
       state.rsvp.message = "";
+      state.rsvp.submitted = false;
       render();
     });
   });
@@ -470,12 +537,12 @@ function bindRsvpEvents() {
 
     const incompleteGuest = state.rsvp.guests.find((guest) => {
       if (!guest.attendance) return true;
-      if (guest.attendance === "yes" && !guest.meal) return true;
+      if (guest.attendance === "yes" && !guest.dietaryRestriction) return true;
       return false;
     });
 
     if (incompleteGuest) {
-      state.rsvp.message = "Completa la asistencia y el menu de cada invitado antes de enviar.";
+      state.rsvp.message = "Completa la asistencia y la restriccion alimentaria de cada invitado antes de enviar.";
       state.rsvp.submitted = false;
       render();
       return;

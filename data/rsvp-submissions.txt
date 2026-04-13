@@ -13,3 +13,8 @@ Fecha: 2026-04-13T03:51:14.050Z
 Grupo: Familia Garcia Lopez
 - Ana Garcia: Asistira | Menu: Estandar
 - Luis Lopez: No asistira
+========================================
+Fecha: 2026-04-13T04:59:03.400Z
+Grupo: Familia Garcia Lopez
+- Ana Garcia: Asistira | Restriccion: No, ninguna
+- Luis Lopez: Asistira | Restriccion: Si, vegetariano
