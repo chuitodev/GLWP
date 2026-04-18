@@ -485,8 +485,8 @@ function renderRsvp(config) {
 
 function renderFooter() {
   return `
-    <div class="footer-note">
-      <div>Esta version lee el contenido desde .env, sirve fotos locales desde /uploads y guarda RSVP en la carpeta /data.</div>
+      <div class="footer-note">
+      <div>Esta version lee el contenido desde .env, sirve fotos locales desde /uploads y guarda RSVP en la carpeta /storage/data.</div>
     </div>
   `;
 }

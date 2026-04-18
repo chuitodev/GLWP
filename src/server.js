@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, "data");
-const UPLOADS_DIR = path.join(__dirname, "uploads");
+const ROOT_DIR = path.resolve(__dirname, "..");
+const PUBLIC_DIR = path.join(ROOT_DIR, "public");
+const STORAGE_DIR = path.join(ROOT_DIR, "storage");
+const DATA_DIR = path.join(STORAGE_DIR, "data");
+const UPLOADS_DIR = path.join(STORAGE_DIR, "uploads");
 
-await loadLocalEnv(path.join(__dirname, ".env"));
+await loadLocalEnv(path.join(ROOT_DIR, ".env"));
 const PORT = Number(process.env.PORT || 8080);
 
 const MIME_TYPES = {
@@ -44,17 +47,17 @@ const server = createServer(async (req, res) => {
     }
 
     const fileMap = {
-      "/": path.join(__dirname, "index.html"),
-      "/index.html": path.join(__dirname, "index.html"),
-      "/styles.css": path.join(__dirname, "styles.css"),
-      "/main.js": path.join(__dirname, "main.js"),
+      "/": path.join(PUBLIC_DIR, "index.html"),
+      "/index.html": path.join(PUBLIC_DIR, "index.html"),
+      "/styles.css": path.join(PUBLIC_DIR, "styles.css"),
+      "/main.js": path.join(PUBLIC_DIR, "main.js"),
     };
 
     if (fileMap[pathname]) {
       return serveStaticFile(res, fileMap[pathname]);
     }
 
-    return serveStaticFile(res, path.join(__dirname, "index.html"));
+    return serveStaticFile(res, path.join(PUBLIC_DIR, "index.html"));
   } catch (error) {
     console.error(error);
     sendJson(res, 500, {
@@ -240,7 +243,7 @@ function buildConfig() {
       title: env("RSVP_TITLE", "Confirmacion de asistencia"),
       description: env(
         "RSVP_DESCRIPTION",
-        "Confirma por grupo. Las respuestas se guardan en la carpeta data del proyecto."
+        "Confirma por grupo. Las respuestas se guardan en la carpeta storage/data del proyecto."
       ),
       groupName: env("RSVP_GROUP_NAME", "Familia invitada"),
       dietaryQuestion: env(
@@ -316,7 +319,7 @@ async function persistRsvp(payload) {
   return {
     ok: true,
     message: "RSVP guardado correctamente.",
-    file: "/data/rsvp-submissions.txt",
+    file: "/storage/data/rsvp-submissions.txt",
   };
 }
 

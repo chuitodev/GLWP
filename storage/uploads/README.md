@@ -2,6 +2,8 @@
 
 Sube aqui las imagenes que vas a usar en la invitacion.
 
+Ruta actual: `storage/uploads/`
+
 ## Rutas recomendadas
 
 - `uploads/hero.jpg`

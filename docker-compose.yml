@@ -7,5 +7,5 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./uploads:/app/uploads
-      - ./data:/app/data
+      - ./storage/uploads:/app/storage/uploads
+      - ./storage/data:/app/storage/data
