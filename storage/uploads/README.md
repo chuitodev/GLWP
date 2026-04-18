@@ -4,10 +4,10 @@ Sube aqui las imagenes que vas a usar en la invitacion.
 
 ## Rutas recomendadas
 
-- `uploads/hero.jpg`
-- `uploads/story-1.jpg`
-- `uploads/story-2.jpg`
-- `uploads/story-3.jpg`
+- `storage/uploads/hero.jpg`
+- `storage/uploads/story-1.jpg`
+- `storage/uploads/story-2.jpg`
+- `storage/uploads/story-3.jpg`
 
 ## Como se usa el orden
 
