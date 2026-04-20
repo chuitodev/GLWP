@@ -11,6 +11,9 @@ const state = {
   },
 };
 
+let toastTimer = 0;
+let toastCleanupTimer = 0;
+
 bootstrap();
 
 async function bootstrap() {
@@ -121,7 +124,7 @@ function render() {
         <div class="section__header">
           <span class="eyebrow">Cargando</span>
           <h2>Preparando invitacion</h2>
-          <p>Estamos leyendo el archivo .env y acomodando las fotos y datos del evento.</p>
+          <p>Estamos cargando la configuracion persistida y preparando los detalles del evento.</p>
         </div>
       </section>
     `;
@@ -157,7 +160,6 @@ function render() {
     ${renderRegistry(config)}
     ${renderNotes(config)}
     ${renderRsvp(config)}
-    ${renderFooter()}
   `;
 
   bindRsvpEvents();
@@ -168,7 +170,7 @@ function renderHero(config) {
     {
       label: "Fecha del evento",
       title: formatEventDate(config.hero.eventDate, config.hero.timezone, "date"),
-      meta: formatEventDate(config.hero.eventDate, config.hero.timezone, "long"),
+      meta: formatEventDate(config.hero.eventDate, config.hero.timezone, "weekdayTime"),
     },
     ...config.hero.cards.map((item) => ({
       label: item.label,
@@ -202,22 +204,24 @@ function renderHero(config) {
           <a class="button" href="#rsvp">Confirmar asistencia</a>
           <a class="button--ghost" href="#itinerario">Ver itinerario</a>
         </div>
+      </div>
+      <aside class="hero__poster">
+        ${renderPhoto(config.hero.heroPhoto, config.hero.heroPhotoAlt, "poster-frame poster-frame--photo")}
+      </aside>
+      <div class="hero__countdown">
         <div class="countdown" id="countdown">
           ${["Dias", "Horas", "Min", "Seg"]
             .map(
               (label) => `
                 <div class="countdown__item">
                   <div class="countdown__value">00</div>
-                  <div>${label}</div>
+                  <div class="countdown__label">${label}</div>
                 </div>
               `
             )
             .join("")}
         </div>
       </div>
-      <aside class="hero__poster">
-        ${renderPhoto(config.hero.heroPhoto, config.hero.heroPhotoAlt, "poster-frame poster-frame--photo")}
-      </aside>
     </section>
   `;
 }
@@ -375,24 +379,30 @@ function renderRegistry(config) {
             if (item.actionUrl) {
               action = `<a class="registry-item__action button-link" href="${escapeHtml(item.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(item.actionLabel || "Abrir")}</a>`;
             } else if (item.copyValue) {
-              action = `<button class="registry-item__action button-link button-link--button" type="button" data-copy="${escapeHtml(item.copyValue)}">${escapeHtml(item.actionLabel || "Copiar")}</button>`;
+              const copyMessage =
+                String(item.actionLabel || "").toLowerCase().includes("clabe")
+                  ? "CLABE copiada al portapapeles."
+                  : "Dato copiado al portapapeles.";
+              action = `<button class="registry-item__action button-link button-link--button" type="button" data-copy="${escapeHtml(item.copyValue)}" data-copy-message="${escapeHtml(copyMessage)}">${escapeHtml(item.actionLabel || "Copiar")}</button>`;
             }
 
             return `
               <article class="registry-item">
-                <span class="registry-item__title">${escapeHtml(item.title)}</span>
-                <div>${escapeHtml(item.description)}</div>
-                ${
-                  item.details.length
-                    ? `
-                      <div class="registry-item__details">
-                        ${item.details
-                          .map((detail) => `<div class="registry-item__detail">${escapeHtml(detail)}</div>`)
-                          .join("")}
-                      </div>
-                    `
-                    : ""
-                }
+                <div class="registry-item__content">
+                  <span class="registry-item__title">${escapeHtml(item.title)}</span>
+                  <div>${escapeHtml(item.description)}</div>
+                  ${
+                    item.details.length
+                      ? `
+                        <div class="registry-item__details">
+                          ${item.details
+                            .map((detail) => `<div class="registry-item__detail">${escapeHtml(detail)}</div>`)
+                            .join("")}
+                        </div>
+                      `
+                      : ""
+                  }
+                </div>
                 ${action}
               </article>
             `;
@@ -426,13 +436,11 @@ function renderRsvp(config) {
       <div class="section__header">
         <span class="eyebrow">RSVP</span>
         <h2>${escapeHtml(config.rsvp.title)}</h2>
-        <p>${escapeHtml(config.rsvp.description)}</p>
       </div>
       <div class="${statusClass}">
         <div>
           <div class="eyebrow">Grupo invitado</div>
           <strong>${escapeHtml(config.rsvp.groupName)}</strong>
-          <div>Esta respuesta se guardara dentro de la carpeta local del proyecto.</div>
         </div>
         <div class="rsvp-status">
           <div class="eyebrow">Estado</div>
@@ -483,23 +491,16 @@ function renderRsvp(config) {
   `;
 }
 
-function renderFooter() {
-  return `
-      <div class="footer-note">
-      <div>Esta version lee el contenido desde .env, sirve fotos locales desde /uploads y guarda RSVP en la carpeta /storage/data.</div>
-    </div>
-  `;
-}
-
 function bindRsvpEvents() {
   document.querySelectorAll("[data-copy]").forEach((button) => {
     button.addEventListener("click", async () => {
       const value = button.getAttribute("data-copy") || "";
+      const message = button.getAttribute("data-copy-message") || "Dato copiado al portapapeles.";
       try {
         await navigator.clipboard.writeText(value);
+        showToast(message);
       } catch {
-        state.rsvp.message = "No se pudo copiar automaticamente.";
-        render();
+        showToast("No se pudo copiar automaticamente.", "error");
       }
     });
   });
@@ -576,11 +577,48 @@ function bindRsvpEvents() {
   });
 }
 
+function showToast(message, variant = "success") {
+  const host = ensureToastHost();
+  const toast = document.createElement("div");
+  toast.className = `toast toast--${variant}`;
+  toast.textContent = message;
+
+  window.clearTimeout(toastTimer);
+  window.clearTimeout(toastCleanupTimer);
+  host.replaceChildren(toast);
+
+  window.requestAnimationFrame(() => {
+    toast.classList.add("is-visible");
+  });
+
+  toastTimer = window.setTimeout(() => {
+    toast.classList.remove("is-visible");
+    toastCleanupTimer = window.setTimeout(() => {
+      if (host.contains(toast)) {
+        toast.remove();
+      }
+    }, 220);
+  }, 2400);
+}
+
+function ensureToastHost() {
+  let host = document.querySelector("#toast-stack");
+  if (host) return host;
+
+  host = document.createElement("div");
+  host.id = "toast-stack";
+  host.className = "toast-stack";
+  host.setAttribute("aria-live", "polite");
+  host.setAttribute("aria-atomic", "true");
+  document.body.append(host);
+  return host;
+}
+
 function renderPhoto(src, alt, className) {
   if (!src) {
     return `
       <div class="${className} photo-shell photo-shell--placeholder">
-        <span>Agrega una foto en /uploads y define su ruta en el archivo .env</span>
+        <span>Agrega una foto en /uploads y registra su ruta desde el panel administrativo.</span>
       </div>
     `;
   }
@@ -599,6 +637,15 @@ function formatEventDate(dateString, timezone, variant) {
       day: "2-digit",
       month: "long",
       year: "numeric",
+      timeZone: timezone,
+    }).format(date);
+  }
+
+  if (variant === "weekdayTime") {
+    return new Intl.DateTimeFormat("es-MX", {
+      weekday: "long",
+      hour: "numeric",
+      minute: "2-digit",
       timeZone: timezone,
     }).format(date);
   }

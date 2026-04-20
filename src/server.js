@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createConfigStore } from "./lib/config-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +14,11 @@ const UPLOADS_DIR = path.join(STORAGE_DIR, "uploads");
 
 await loadLocalEnv(path.join(ROOT_DIR, ".env"));
 const PORT = Number(process.env.PORT || 8080);
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const configStore = createConfigStore({ dataDir: DATA_DIR });
+
+await configStore.ensure();
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -27,13 +33,73 @@ const MIME_TYPES = {
   ".svg": "image/svg+xml",
 };
 
+const STATIC_FILE_MAP = {
+  "/": path.join(PUBLIC_DIR, "index.html"),
+  "/index.html": path.join(PUBLIC_DIR, "index.html"),
+  "/styles.css": path.join(PUBLIC_DIR, "styles.css"),
+  "/main.js": path.join(PUBLIC_DIR, "main.js"),
+  "/admin": path.join(PUBLIC_DIR, "admin.html"),
+  "/admin.html": path.join(PUBLIC_DIR, "admin.html"),
+  "/admin.css": path.join(PUBLIC_DIR, "admin.css"),
+  "/admin.js": path.join(PUBLIC_DIR, "admin.js"),
+};
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
 
     if (pathname === "/api/config" && req.method === "GET") {
-      return sendJson(res, 200, buildConfig());
+      const config = await configStore.load();
+      return sendJson(res, 200, buildPublicConfig(config));
+    }
+
+    if (pathname === "/api/admin/config" && req.method === "GET") {
+      if (!authorizeAdmin(req, res)) return;
+      return sendJson(res, 200, await configStore.load());
+    }
+
+    if (pathname === "/api/admin/config" && req.method === "PUT") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const config = await configStore.save(body);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Configuracion guardada correctamente.",
+        config,
+      });
+    }
+
+    if (pathname === "/api/admin/seed" && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const config = await configStore.resetFromSeed();
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Configuracion restaurada desde la semilla inicial.",
+        config,
+      });
+    }
+
+    if (pathname === "/api/admin/meta" && req.method === "GET") {
+      if (!authorizeAdmin(req, res)) return;
+      return sendJson(res, 200, {
+        storage: {
+          configPath: configStore.configPath,
+          uploadsPath: UPLOADS_DIR,
+          dataPath: DATA_DIR,
+        },
+        authEnabled: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD),
+      });
+    }
+
+    if (pathname === "/api/admin/upload" && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const uploaded = await persistUpload(req);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Imagen subida correctamente.",
+        file: uploaded,
+      });
     }
 
     if (pathname === "/api/rsvp" && req.method === "POST") {
@@ -46,15 +112,12 @@ const server = createServer(async (req, res) => {
       return serveStaticFile(res, safeJoin(UPLOADS_DIR, pathname.replace("/uploads/", "")));
     }
 
-    const fileMap = {
-      "/": path.join(PUBLIC_DIR, "index.html"),
-      "/index.html": path.join(PUBLIC_DIR, "index.html"),
-      "/styles.css": path.join(PUBLIC_DIR, "styles.css"),
-      "/main.js": path.join(PUBLIC_DIR, "main.js"),
-    };
+    if (pathname === "/admin" || pathname === "/admin.html") {
+      if (!authorizeAdmin(req, res)) return;
+    }
 
-    if (fileMap[pathname]) {
-      return serveStaticFile(res, fileMap[pathname]);
+    if (STATIC_FILE_MAP[pathname]) {
+      return serveStaticFile(res, STATIC_FILE_MAP[pathname]);
     }
 
     return serveStaticFile(res, path.join(PUBLIC_DIR, "index.html"));
@@ -96,189 +159,56 @@ async function loadLocalEnv(envPath) {
   }
 }
 
-function buildConfig() {
-  const dressLinkCount = Number(env("DRESS_LINK_COUNT", "1"));
-  const timelineItems = parseCountedItems("TIMELINE", Number(env("TIMELINE_COUNT", "3")), (index) => ({
-    id: `timeline-${index}`,
-    label: env(`TIMELINE_${index}_LABEL`, ""),
-    time: env(`TIMELINE_${index}_TIME`, ""),
-    venue: env(`TIMELINE_${index}_VENUE`, ""),
-    address: env(`TIMELINE_${index}_ADDRESS`, ""),
-    mapsUrl: env(`TIMELINE_${index}_MAPS_URL`, ""),
-  })).filter((item) => item.label || item.venue || item.time);
-
-  const lodgingItems = parseCountedItems("LODGING", Number(env("LODGING_COUNT", "0")), (index) => ({
-    id: `lodging-${index}`,
-    minutes: env(`LODGING_${index}_MINUTES`, ""),
-    name: env(`LODGING_${index}_NAME`, ""),
-    address: env(`LODGING_${index}_ADDRESS`, ""),
-    mapsUrl: env(`LODGING_${index}_MAPS_URL`, ""),
-  })).filter((item) => item.name);
-
-  const registryItems = parseCountedItems("REGISTRY", Number(env("REGISTRY_COUNT", "0")), (index) => ({
-    id: `registry-${index}`,
-    title: env(`REGISTRY_${index}_TITLE`, ""),
-    description: env(`REGISTRY_${index}_DESCRIPTION`, ""),
-    details: splitList(env(`REGISTRY_${index}_DETAILS`, ""), "|"),
-    actionLabel: env(`REGISTRY_${index}_ACTION_LABEL`, ""),
-    actionUrl: env(`REGISTRY_${index}_ACTION_URL`, ""),
-    copyValue: env(`REGISTRY_${index}_COPY_VALUE`, ""),
-  })).filter((item) => item.title);
-
-  const notes = parseCountedItems("NOTE", Number(env("NOTE_COUNT", "0")), (index) =>
-    env(`NOTE_${index}`, "")
-  ).filter(Boolean);
-
-  const guests = parseCountedItems("GUEST", Number(env("GUEST_COUNT", "0")), (index) => ({
-    id: `guest-${index}`,
-    name: env(`GUEST_${index}_NAME`, `Invitado ${index}`),
-  }));
-
-  const dressLinks = parseCountedItems("DRESS_LINK", dressLinkCount, (index) => ({
-      id: `dress-link-${index}`,
-      label: env(`DRESS_LINK_${index}_LABEL`, ""),
-      url: env(`DRESS_LINK_${index}_URL`, ""),
-    }))
-    .filter((item) => item.label && item.url);
-
-  const galleryPhotos = [1, 2, 3]
-    .map((index) => ({
-      id: `gallery-${index}`,
-      src: env(`STORY_PHOTO_${index}`, ""),
-      alt: env(`STORY_PHOTO_${index}_ALT`, `Foto ${index} de la historia`),
-    }))
-    .filter((item) => item.src);
-
+function buildPublicConfig(config) {
   return {
-    brandLabel: env("BRAND_LABEL", "GLWP INVITATION SYSTEM"),
-    topbarActionLabel: env("TOPBAR_ACTION_LABEL", "Ir a RSVP"),
-    theme: {
-      background: env("THEME_COLOR_BACKGROUND", "#fbf5ef"),
-      backgroundStrong: env("THEME_COLOR_BACKGROUND_STRONG", "#f1e4d6"),
-      backgroundEnd: env("THEME_COLOR_BACKGROUND_END", "#efe1d2"),
-      surface: env("THEME_COLOR_SURFACE", "rgba(255, 252, 247, 0.74)"),
-      surfaceStrong: env("THEME_COLOR_SURFACE_STRONG", "rgba(255, 249, 242, 0.92)"),
-      border: env("THEME_COLOR_BORDER", "rgba(92, 64, 51, 0.14)"),
-      text: env("THEME_COLOR_TEXT", "#34231c"),
-      textMuted: env("THEME_COLOR_TEXT_MUTED", "#70554a"),
-      title: env("THEME_COLOR_TITLE", "#34231c"),
-      primary: env("THEME_COLOR_PRIMARY", "#b4664a"),
-      primarySoft: env("THEME_COLOR_PRIMARY_SOFT", "rgba(180, 102, 74, 0.12)"),
-      primaryText: env("THEME_COLOR_PRIMARY_TEXT", "#fff9f4"),
-      heroText: env("THEME_COLOR_HERO_TEXT", "#fff8f1"),
-      success: env("THEME_COLOR_SUCCESS", "#2d6b4b"),
-      heroGradientStart: env("THEME_HERO_GRADIENT_START", "#4d352c"),
-      heroGradientMid: env("THEME_HERO_GRADIENT_MID", "#a66f57"),
-      heroGradientEnd: env("THEME_HERO_GRADIENT_END", "#f3e3d2"),
-    },
+    ...config,
     couple: {
-      bride: env("BRIDE_NAME", "Camila"),
-      groom: env("GROOM_NAME", "Julian"),
-      display: env("COUPLE_DISPLAY_NAME", ""),
+      ...config.couple,
+      display:
+        config.couple.display ||
+        [config.couple.bride, config.couple.groom].filter(Boolean).join(" & "),
     },
     hero: {
-      eyebrow: env("HERO_EYEBROW", "Nos casamos"),
-      subtitle: env(
-        "HERO_SUBTITLE",
-        "Una celebracion para bailar, abrazar y volver a enamorarnos de la vida juntos."
-      ),
-      heroPhoto: env("HERO_PHOTO", ""),
-      heroPhotoAlt: env("HERO_PHOTO_ALT", "Foto principal de los novios"),
-      eventDate: env("EVENT_DATE", "2026-11-21T17:00:00-06:00"),
-      timezone: env("EVENT_TIMEZONE", "America/Mexico_City"),
-      city: env("EVENT_CITY", "San Miguel de Allende, Guanajuato"),
-      cards: timelineItems.slice(0, 3),
-    },
-    parents: {
-      title: env("PARENTS_SECTION_TITLE", "Nuestros padres"),
-      text: env("PARENTS_SECTION_TEXT", ""),
-      groomTitle: env("GROOM_PARENTS_TITLE", "Padres del novio"),
-      groomNames: splitList(env("GROOM_PARENTS_NAMES", ""), "|"),
-      brideTitle: env("BRIDE_PARENTS_TITLE", "Padres de la novia"),
-      brideNames: splitList(env("BRIDE_PARENTS_NAMES", ""), "|"),
-      galleryPhotos,
-    },
-    timeline: {
-      title: env("TIMELINE_TITLE", "Itinerario"),
-      description: env(
-        "TIMELINE_DESCRIPTION",
-        "Cada bloque del evento se configura desde el archivo .env y se renderiza en el orden indicado."
-      ),
-      items: timelineItems,
-    },
-    dressCode: {
-      title: env("DRESS_TITLE", "Dress code"),
-      description: env("DRESS_DESCRIPTION", "Formal contemporaneo."),
-      guidance: env(
-        "DRESS_GUIDANCE",
-        "Sugerimos tonos tierra, marfil, negro profundo o verdes secos. Evitar blanco pleno."
-      ),
-      palette: env("DRESS_PALETTE", "#4f3b34,#d6b9a5,#7a8b6e,#1e1c1b,#b4664a")
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean),
-      links: dressLinks,
-    },
-    lodging: {
-      title: env("LODGING_TITLE", "Hospedaje"),
-      description: env(
-        "LODGING_DESCRIPTION",
-        "Agrega, quita o reordena estas opciones editando el bloque de hospedaje en el .env."
-      ),
-      items: lodgingItems,
-    },
-    registry: {
-      title: env("REGISTRY_TITLE", "Mesa de regalos"),
-      description: env(
-        "REGISTRY_DESCRIPTION",
-        "Cada item puede ser solo informativo, abrir un enlace o copiar un dato."
-      ),
-      items: registryItems,
-    },
-    notes: {
-      title: env("NOTES_TITLE", "Indicaciones finales"),
-      items: notes,
-    },
-    rsvp: {
-      title: env("RSVP_TITLE", "Confirmacion de asistencia"),
-      description: env(
-        "RSVP_DESCRIPTION",
-        "Confirma por grupo. Las respuestas se guardan en la carpeta storage/data del proyecto."
-      ),
-      groupName: env("RSVP_GROUP_NAME", "Familia invitada"),
-      dietaryQuestion: env(
-        "RSVP_DIETARY_QUESTION",
-        "Tiene alguna restriccion alimentaria?"
-      ),
-      dietaryOptions: env(
-        "RSVP_DIETARY_OPTIONS",
-        env("RSVP_MEAL_OPTIONS", "No, ninguna|Si, vegetariano|Si, vegano")
-      )
-        .split("|")
-        .map((value) => value.trim())
-        .filter(Boolean),
-      guests,
+      ...config.hero,
+      cards: config.timeline.items.slice(0, 3),
     },
   };
 }
 
-function parseCountedItems(prefix, count, mapper) {
-  const items = [];
-  for (let index = 1; index <= count; index += 1) {
-    items.push(mapper(index));
+function authorizeAdmin(req, res) {
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
+    return true;
   }
-  return items;
+
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Basic ")) {
+    return requestAdminAuth(res);
+  }
+
+  const credentials = Buffer.from(header.slice(6), "base64").toString("utf8");
+  const separatorIndex = credentials.indexOf(":");
+  const username = separatorIndex === -1 ? credentials : credentials.slice(0, separatorIndex);
+  const password = separatorIndex === -1 ? "" : credentials.slice(separatorIndex + 1);
+
+  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+    return requestAdminAuth(res);
+  }
+
+  return true;
 }
 
-function splitList(value, separator = "|") {
-  return value
-    .split(separator)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function env(key, fallback = "") {
-  return process.env[key] ?? fallback;
+function requestAdminAuth(res) {
+  res.writeHead(401, {
+    "Content-Type": "application/json; charset=utf-8",
+    "WWW-Authenticate": 'Basic realm="GLWP Admin"',
+  });
+  res.end(
+    JSON.stringify({
+      error: "admin_auth_required",
+      message: "Credenciales de administrador requeridas.",
+    })
+  );
+  return false;
 }
 
 async function persistRsvp(payload) {
@@ -323,6 +253,43 @@ async function persistRsvp(payload) {
   };
 }
 
+async function persistUpload(req) {
+  const contentType = req.headers["content-type"] || "";
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!contentType.startsWith("multipart/form-data") || !boundaryMatch) {
+    throw new Error("Solicitud de subida invalida.");
+  }
+
+  const boundary = boundaryMatch[1] || boundaryMatch[2];
+  const body = await readRequestBuffer(req);
+  const filePart = parseMultipartFile(body, boundary);
+
+  if (!filePart || !filePart.filename || !filePart.data?.length) {
+    throw new Error("No se encontro ningun archivo en la subida.");
+  }
+
+  if (!isAllowedUploadType(filePart.contentType, filePart.filename)) {
+    throw new Error("Solo se permiten imagenes jpg, png, webp, gif o svg.");
+  }
+
+  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+
+  const safeName = sanitizeFilename(filePart.filename);
+  const ext = path.extname(safeName) || extensionFromMime(filePart.contentType) || ".bin";
+  const base = path.basename(safeName, path.extname(safeName)).slice(0, 60) || "upload";
+  const finalName = `${Date.now()}-${base}${ext}`;
+  const finalPath = path.join(UPLOADS_DIR, finalName);
+
+  await fs.writeFile(finalPath, filePart.data);
+
+  return {
+    filename: finalName,
+    url: `/uploads/${finalName}`,
+    contentType: filePart.contentType || "application/octet-stream",
+    size: filePart.data.length,
+  };
+}
+
 async function readJsonBody(req) {
   const chunks = [];
   for await (const chunk of req) {
@@ -332,13 +299,110 @@ async function readJsonBody(req) {
   return JSON.parse(raw);
 }
 
+async function readRequestBuffer(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+function parseMultipartFile(body, boundary) {
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  const sections = [];
+  let start = body.indexOf(boundaryBuffer);
+
+  while (start !== -1) {
+    const next = body.indexOf(boundaryBuffer, start + boundaryBuffer.length);
+    if (next === -1) break;
+    sections.push(body.subarray(start + boundaryBuffer.length, next));
+    start = next;
+  }
+
+  for (const section of sections) {
+    const normalized = trimMultipartSection(section);
+    if (!normalized.length || normalized.equals(Buffer.from("--"))) continue;
+
+    const headerEnd = normalized.indexOf(Buffer.from("\r\n\r\n"));
+    if (headerEnd === -1) continue;
+
+    const headerText = normalized.subarray(0, headerEnd).toString("utf8");
+    const content = normalized.subarray(headerEnd + 4);
+    const disposition = headerText.match(/name="([^"]+)"/i);
+    const filename = headerText.match(/filename="([^"]*)"/i);
+    const contentType = headerText.match(/content-type:\s*([^\r\n]+)/i);
+
+    if (disposition?.[1] !== "file" || !filename?.[1]) continue;
+
+    return {
+      filename: filename[1],
+      contentType: contentType?.[1]?.trim() || "",
+      data: trimMultipartSection(content),
+    };
+  }
+
+  return null;
+}
+
+function trimMultipartSection(buffer) {
+  let start = 0;
+  let end = buffer.length;
+
+  while (start < end && (buffer[start] === 13 || buffer[start] === 10)) start += 1;
+  while (end > start && (buffer[end - 1] === 13 || buffer[end - 1] === 10 || buffer[end - 1] === 45)) end -= 1;
+
+  return buffer.subarray(start, end);
+}
+
+function isAllowedUploadType(contentType, filename) {
+  const allowed = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/svg+xml",
+  ]);
+
+  if (allowed.has((contentType || "").toLowerCase())) {
+    return true;
+  }
+
+  return [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"].includes(
+    path.extname(filename || "").toLowerCase()
+  );
+}
+
+function sanitizeFilename(filename) {
+  return String(filename || "")
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+function extensionFromMime(contentType) {
+  const map = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/svg+xml": ".svg",
+  };
+  return map[(contentType || "").toLowerCase()] || "";
+}
+
 async function serveStaticFile(res, filePath) {
   try {
     const data = await fs.readFile(filePath);
     const extension = path.extname(filePath).toLowerCase();
+    const cacheControl =
+      extension === ".html" || extension === ".js" || extension === ".css"
+        ? "no-store, no-cache, must-revalidate"
+        : "public, max-age=300";
     res.writeHead(200, {
       "Content-Type": MIME_TYPES[extension] || "application/octet-stream",
-      "Cache-Control": extension === ".html" ? "no-cache" : "public, max-age=300",
+      "Cache-Control": cacheControl,
     });
     res.end(data);
   } catch {
