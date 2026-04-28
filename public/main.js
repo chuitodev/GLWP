@@ -1,7 +1,10 @@
 const app = document.querySelector("#app");
+const inviteToken = extractInviteToken();
 
 const state = {
+  mode: inviteToken ? "invite" : "preview",
   config: null,
+  invitation: null,
   loading: true,
   error: "",
   rsvp: {
@@ -20,19 +23,22 @@ async function bootstrap() {
   render();
 
   try {
-    const response = await fetch("/api/config");
+    const endpoint = inviteToken ? `/api/invite/${encodeURIComponent(inviteToken)}` : "/api/config";
+    const response = await fetch(endpoint);
     if (!response.ok) {
-      throw new Error("No fue posible cargar la configuracion.");
+      throw new Error(
+        inviteToken
+          ? "No fue posible cargar la invitacion personalizada."
+          : "No fue posible cargar la configuracion."
+      );
     }
 
-    const config = await response.json();
-    state.config = normalizeConfig(config);
-    state.rsvp.guests = state.config.rsvp.guests.map((guest) => ({
-      id: guest.id,
-      name: guest.name,
-      attendance: "",
-      dietaryRestriction: state.config.rsvp.dietaryOptions[0] || "",
-    }));
+    const payload = await response.json();
+    const config = normalizeConfig(inviteToken ? payload.config : payload);
+
+    state.config = config;
+    state.invitation = inviteToken ? normalizeInvitation(payload.invitation) : null;
+    state.rsvp.guests = seedRsvpGuests(config, state.invitation);
     state.loading = false;
     render();
     startCountdown();
@@ -60,6 +66,35 @@ function normalizeConfig(config) {
       display: displayName,
     },
   };
+}
+
+function normalizeInvitation(invitation = {}) {
+  return {
+    ...invitation,
+    members: Array.isArray(invitation.members) ? invitation.members : [],
+    rsvp: invitation.rsvp || {},
+    delivery: invitation.delivery || {},
+  };
+}
+
+function seedRsvpGuests(config, invitation) {
+  const dietaryDefault = config.rsvp.dietaryOptions[0] || "";
+
+  if (invitation) {
+    return invitation.members.map((member) => ({
+      id: member.id,
+      name: member.displayName,
+      attendance: "",
+      dietaryRestriction: dietaryDefault,
+    }));
+  }
+
+  return state.config?.rsvp?.guests?.map((guest) => ({
+    id: guest.id,
+    name: guest.name,
+    attendance: "",
+    dietaryRestriction: dietaryDefault,
+  })) || [];
 }
 
 function applyTheme(theme) {
@@ -148,7 +183,9 @@ function render() {
   applyTheme(config.theme);
   const brandLabel = document.querySelector("#brand-label");
   const topbarAction = document.querySelector("#topbar-action");
-  if (brandLabel) brandLabel.textContent = config.brandLabel;
+  if (brandLabel) {
+    brandLabel.textContent = state.invitation?.invitationCode || config.brandLabel;
+  }
   if (topbarAction) topbarAction.textContent = config.topbarActionLabel;
 
   app.innerHTML = `
@@ -428,6 +465,14 @@ function renderNotes(config) {
 }
 
 function renderRsvp(config) {
+  if (state.mode === "invite" && state.invitation) {
+    return renderPersonalizedRsvp(config, state.invitation);
+  }
+
+  return renderGenericRsvp(config);
+}
+
+function renderGenericRsvp(config) {
   const statusLabel = state.rsvp.submitted ? "Confirmacion enviada" : "Pendiente";
   const statusClass = state.rsvp.submitted ? "status-strip status-strip--confirmed" : "status-strip";
 
@@ -447,47 +492,144 @@ function renderRsvp(config) {
           <strong class="rsvp-status__badge">${escapeHtml(statusLabel)}</strong>
         </div>
       </div>
-      <form id="rsvp-form" class="rsvp-form">
-        <div class="rsvp-group">
-          ${state.rsvp.guests
-            .map(
-              (guest) => `
-                <article class="rsvp-person" data-guest-id="${escapeHtml(guest.id)}">
-                  <div class="rsvp-person__header">
-                    <span class="rsvp-person__name">${escapeHtml(guest.name)}</span>
-                    <span class="eyebrow">Confirmacion individual</span>
-                  </div>
-                  <div class="rsvp-person__controls">
-                    <div class="rsvp-person__decision">
-                      <div class="choice-group" role="group" aria-label="Asistencia de ${escapeHtml(guest.name)}">
-                        <button class="choice-button ${guest.attendance === "yes" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="yes">Asistire</button>
-                        <button class="choice-button ${guest.attendance === "no" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="no">No podre asistir</button>
-                      </div>
-                      <div class="rsvp-dietary ${guest.attendance === "yes" ? "" : "is-hidden"}">
-                        <div class="rsvp-dietary__question">${escapeHtml(config.rsvp.dietaryQuestion)}</div>
-                        <div class="choice-group meal-group" role="group" aria-label="Restriccion alimentaria de ${escapeHtml(guest.name)}">
-                          ${config.rsvp.dietaryOptions
-                            .map(
-                              (option) => `
-                                <button class="choice-button choice-button--meal ${guest.dietaryRestriction === option ? "is-active" : ""}" type="button" data-guest-action="dietary" data-guest-id="${escapeHtml(guest.id)}" data-value="${escapeHtml(option)}">${escapeHtml(option)}</button>
-                              `
-                            )
-                            .join("")}
-                        </div>
+      ${renderRsvpForm(config)}
+    </section>
+  `;
+}
+
+function renderPersonalizedRsvp(config, invitation) {
+  const locked = Boolean(invitation.rsvp?.lockedAt);
+  const displayStatusLabel = invitation.displayStatusLabel || "Pendiente";
+  const statusLabel = locked
+    ? displayStatusLabel
+    : state.rsvp.submitted
+      ? "Confirmacion enviada"
+      : invitation.delivery?.lastSentAt
+        ? "Invitacion enviada"
+        : "Pendiente";
+  const statusClass =
+    locked && invitation.displayStatus === "confirmed"
+      ? "status-strip status-strip--confirmed"
+      : "status-strip";
+
+  return `
+    <section class="section rsvp" id="rsvp">
+      <div class="section__header">
+        <span class="eyebrow">RSVP privado</span>
+        <h2>${escapeHtml(config.rsvp.title)}</h2>
+      </div>
+      <div class="${statusClass}">
+        <div>
+          <div class="eyebrow">Codigo visible</div>
+          <strong>${escapeHtml(invitation.invitationCode)}</strong>
+          <div>${escapeHtml(invitation.familyLabel)}</div>
+        </div>
+        <div class="rsvp-status">
+          <div class="eyebrow">Estado</div>
+          <strong class="rsvp-status__badge">${escapeHtml(statusLabel)}</strong>
+        </div>
+      </div>
+      ${
+        locked
+          ? renderLockedSummary(invitation)
+          : `
+            <div class="rsvp__intro">
+              <p>
+                Este enlace es exclusivo para tu grupo. La respuesta se guarda una sola vez y
+                despues queda bloqueada.
+              </p>
+            </div>
+            ${renderRsvpForm(config)}
+          `
+      }
+    </section>
+  `;
+}
+
+function renderRsvpForm(config) {
+  return `
+    <form id="rsvp-form" class="rsvp-form">
+      <div class="rsvp-group">
+        ${state.rsvp.guests
+          .map(
+            (guest) => `
+              <article class="rsvp-person" data-guest-id="${escapeHtml(guest.id)}">
+                <div class="rsvp-person__header">
+                  <span class="rsvp-person__name">${escapeHtml(guest.name)}</span>
+                  <span class="eyebrow">Confirmacion individual</span>
+                </div>
+                <div class="rsvp-person__controls">
+                  <div class="rsvp-person__decision">
+                    <div class="choice-group" role="group" aria-label="Asistencia de ${escapeHtml(guest.name)}">
+                      <button class="choice-button ${guest.attendance === "yes" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="yes">Asistire</button>
+                      <button class="choice-button ${guest.attendance === "no" ? "is-active" : ""}" type="button" data-guest-action="attendance" data-guest-id="${escapeHtml(guest.id)}" data-value="no">No podre asistir</button>
+                    </div>
+                    <div class="rsvp-dietary ${guest.attendance === "yes" ? "" : "is-hidden"}">
+                      <div class="rsvp-dietary__question">${escapeHtml(config.rsvp.dietaryQuestion)}</div>
+                      <div class="choice-group meal-group" role="group" aria-label="Restriccion alimentaria de ${escapeHtml(guest.name)}">
+                        ${config.rsvp.dietaryOptions
+                          .map(
+                            (option) => `
+                              <button class="choice-button choice-button--meal ${guest.dietaryRestriction === option ? "is-active" : ""}" type="button" data-guest-action="dietary" data-guest-id="${escapeHtml(guest.id)}" data-value="${escapeHtml(option)}">${escapeHtml(option)}</button>
+                            `
+                          )
+                          .join("")}
                       </div>
                     </div>
                   </div>
-                </article>
-              `
-            )
-            .join("")}
-        </div>
-        <div class="rsvp-actions rsvp-actions--stack">
-          <button class="button button--submit" type="submit">Enviar confirmacion</button>
-          <div class="feedback ${state.rsvp.submitted ? "feedback--success" : ""}">${escapeHtml(state.rsvp.message)}</div>
-        </div>
-      </form>
-    </section>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+      <div class="rsvp-actions rsvp-actions--stack">
+        <button class="button button--submit" type="submit">Enviar confirmacion</button>
+        <div class="feedback ${state.rsvp.submitted ? "feedback--success" : ""}">${escapeHtml(state.rsvp.message)}</div>
+      </div>
+    </form>
+  `;
+}
+
+function renderLockedSummary(invitation) {
+  const summary = invitation.rsvp?.summary || { guests: [] };
+  return `
+    <div class="rsvp-summary-list">
+      <div class="rsvp-summary-note">
+        Respuesta registrada el ${escapeHtml(
+          formatEventDate(
+            invitation.rsvp.latestSubmittedAt,
+            state.config?.hero?.timezone || "America/Mexico_City",
+            "full"
+          )
+        )}.
+      </div>
+      <div class="rsvp-summary-grid">
+        ${summary.guests
+          .map(
+            (guest) => `
+              <article class="rsvp-summary-card">
+                <strong>${escapeHtml(guest.displayName)}</strong>
+                <span>${escapeHtml(guest.attendance === "yes" ? "Asiste" : "No asiste")}</span>
+                ${
+                  guest.attendance === "yes" && guest.dietaryRestriction
+                    ? `<small>${escapeHtml(guest.dietaryRestriction)}</small>`
+                    : ""
+                }
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+      ${
+        summary.note
+          ? `<div class="final-note">Nota del grupo: ${escapeHtml(summary.note)}</div>`
+          : ""
+      }
+      <div class="feedback feedback--success">
+        ${escapeHtml(state.rsvp.message || "Tu respuesta ya quedo guardada y la invitacion se encuentra bloqueada.")}
+      </div>
+    </div>
   `;
 }
 
@@ -543,31 +685,49 @@ function bindRsvpEvents() {
     });
 
     if (incompleteGuest) {
-      state.rsvp.message = "Completa la asistencia y la restriccion alimentaria de cada invitado antes de enviar.";
+      state.rsvp.message =
+        "Completa la asistencia y la restriccion alimentaria de cada invitado antes de enviar.";
       state.rsvp.submitted = false;
       render();
       return;
     }
 
     try {
-      const response = await fetch("/api/rsvp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          groupName: state.config.rsvp.groupName,
-          guests: state.rsvp.guests,
-        }),
-      });
+      const response = await fetch(
+        inviteToken ? `/api/invite/${encodeURIComponent(inviteToken)}/rsvp` : "/api/rsvp",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(
+            inviteToken
+              ? {
+                  guests: state.rsvp.guests.map((guest) => ({
+                    memberId: guest.id,
+                    attendance: guest.attendance,
+                    dietaryRestriction: guest.dietaryRestriction,
+                  })),
+                }
+              : {
+                  groupName: state.config.rsvp.groupName,
+                  guests: state.rsvp.guests,
+                }
+          ),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error("No se pudo guardar la confirmacion.");
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || "No se pudo guardar la confirmacion.");
       }
 
       const result = await response.json();
       state.rsvp.submitted = true;
       state.rsvp.message = result.message;
+      if (inviteToken) {
+        state.invitation = normalizeInvitation(result.group);
+      }
       render();
     } catch (error) {
       state.rsvp.submitted = false;
@@ -632,6 +792,8 @@ function renderPhoto(src, alt, className) {
 
 function formatEventDate(dateString, timezone, variant) {
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+
   if (variant === "date") {
     return new Intl.DateTimeFormat("es-MX", {
       day: "2-digit",
@@ -650,11 +812,24 @@ function formatEventDate(dateString, timezone, variant) {
     }).format(date);
   }
 
+  if (variant === "full") {
+    return new Intl.DateTimeFormat("es-MX", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: timezone,
+    }).format(date);
+  }
+
   return new Intl.DateTimeFormat("es-MX", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: timezone,
   }).format(date);
+}
+
+function extractInviteToken() {
+  const match = window.location.pathname.match(/^\/invite\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : "";
 }
 
 function escapeHtml(value) {

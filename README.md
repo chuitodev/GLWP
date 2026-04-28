@@ -3,6 +3,7 @@
 Micrositio mobile-first con dos experiencias:
 
 - sitio publico en `/`
+- sitio publico personalizado en `/invite/:token`
 - panel administrativo en `/admin`
 - fotos locales en `./storage/uploads`
 - configuracion persistida en `./storage/data/invitation-config.json`
@@ -14,8 +15,9 @@ Micrositio mobile-first con dos experiencias:
 - `src/`: servidor Node
 - `public/`: HTML, CSS y JS publico
 - `public/admin.*`: panel administrativo
+- `public/admin-invitation.*`: editor legado de la invitacion, ahora embebido dentro de la vista `Invitacion`
 - `storage/uploads/`: fotos locales
-- `storage/data/`: respuestas RSVP y configuracion persistente
+- `storage/data/`: respuestas RSVP, configuracion persistente y store de invitados
 - `sandbox/`: prototipos o variantes no activas
 - `ops/`: configuracion operativa
 
@@ -28,6 +30,7 @@ docker compose up --build -d
 Abre:
 
 - `http://localhost:8080` para la invitacion publica
+- `http://localhost:8080/invite/<token>` para una invitacion personalizada
 - `http://localhost:8080/admin` para el panel
 
 ## Flujo de edicion
@@ -58,3 +61,6 @@ Cuando alguien envia la confirmacion, se generan:
 
 - `storage/data/rsvp-submissions.txt`
 - `storage/data/rsvp-submissions.ndjson`
+- `storage/data/guest-portal.json`
+- `storage/data/guest-rsvp-history.ndjson`
+- `storage/data/guest-send-jobs.ndjson`

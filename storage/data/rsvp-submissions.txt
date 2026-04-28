@@ -23,3 +23,8 @@ Fecha: 2026-04-20T04:28:14.462Z
 Grupo: Familia Garcia Lopez
 - Ana Garcia: Asistira | Restriccion: No, ninguna
 - Luis Lopez: Asistira | Restriccion: No, ninguna
+========================================
+Fecha: 2026-04-21T03:52:31.797Z
+Grupo: Familia Garcia Lopez
+- Ana Garcia: Asistira | Restriccion: Si, vegano
+- Luis Lopez: No asistira

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panel de administracion | Invitacion</title>
+    <meta
+      name="description"
+      content="Panel interno para editar el contenido persistente de la invitacion."
+    />
+    <link rel="stylesheet" href="/styles.css?v=20260420a" />
+    <link rel="stylesheet" href="/admin-invitation.css?v=20260420a" />
+  </head>
+  <body class="admin-body">
+    <div class="admin-shell">
+      <header class="admin-topbar">
+        <div>
+          <div class="eyebrow">CMS interno</div>
+          <h1>Editor de invitacion</h1>
+          <p class="admin-topbar__copy">Pensado para wedding planners y equipos que quieren editar sin tocar codigo.</p>
+        </div>
+        <div class="admin-topbar__actions">
+          <a class="button button--secondary" href="/" target="_blank" rel="noreferrer">Abrir invitacion</a>
+          <button class="button button--ghost-dark" id="reset-seed" type="button">
+            Restaurar semilla
+          </button>
+          <button class="button" id="save-config" type="button">Guardar cambios</button>
+        </div>
+      </header>
+
+      <main class="admin-main">
+        <aside class="admin-sidebar">
+          <nav class="admin-nav" id="admin-nav"></nav>
+        </aside>
+        <section class="admin-content">
+          <div class="admin-status" id="admin-status">Cargando configuracion del editor...</div>
+          <section class="admin-preview" id="admin-preview"></section>
+          <form id="admin-form" class="admin-form"></form>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/admin-invitation.js?v=20260420a"></script>
+  </body>
+</html>

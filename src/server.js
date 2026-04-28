@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConfigStore } from "./lib/config-store.js";
+import { createGuestPortalStore } from "./lib/guest-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,15 +17,21 @@ await loadLocalEnv(path.join(ROOT_DIR, ".env"));
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-const configStore = createConfigStore({ dataDir: DATA_DIR });
 
-await configStore.ensure();
+const configStore = createConfigStore({ dataDir: DATA_DIR });
+const guestStore = createGuestPortalStore({
+  dataDir: DATA_DIR,
+  loadConfig: () => configStore.load(),
+});
+
+await Promise.all([configStore.ensure(), guestStore.ensure()]);
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".csv": "text/csv; charset=utf-8",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
@@ -38,16 +45,26 @@ const STATIC_FILE_MAP = {
   "/index.html": path.join(PUBLIC_DIR, "index.html"),
   "/styles.css": path.join(PUBLIC_DIR, "styles.css"),
   "/main.js": path.join(PUBLIC_DIR, "main.js"),
-  "/admin": path.join(PUBLIC_DIR, "admin.html"),
-  "/admin.html": path.join(PUBLIC_DIR, "admin.html"),
   "/admin.css": path.join(PUBLIC_DIR, "admin.css"),
   "/admin.js": path.join(PUBLIC_DIR, "admin.js"),
+  "/admin-invitation.css": path.join(PUBLIC_DIR, "admin-invitation.css"),
+  "/admin-invitation.js": path.join(PUBLIC_DIR, "admin-invitation.js"),
 };
 
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
+    const baseUrl = getRequestBaseUrl(req);
+
+    const groupMatch = pathname.match(/^\/api\/admin\/invitations\/([^/]+)$/);
+    const membersMatch = pathname.match(/^\/api\/admin\/invitations\/([^/]+)\/members$/);
+    const memberMatch = pathname.match(/^\/api\/admin\/invitations\/([^/]+)\/members\/([^/]+)$/);
+    const sendMatch = pathname.match(/^\/api\/admin\/invitations\/([^/]+)\/send$/);
+    const reopenMatch = pathname.match(/^\/api\/admin\/invitations\/([^/]+)\/reopen-rsvp$/);
+    const sendJobMatch = pathname.match(/^\/api\/admin\/send-jobs\/([^/]+)\/mark-(sent|failed)$/);
+    const inviteMatch = pathname.match(/^\/api\/invite\/([^/]+)$/);
+    const inviteRsvpMatch = pathname.match(/^\/api\/invite\/([^/]+)\/rsvp$/);
 
     if (pathname === "/api/config" && req.method === "GET") {
       const config = await configStore.load();
@@ -87,6 +104,9 @@ const server = createServer(async (req, res) => {
           configPath: configStore.configPath,
           uploadsPath: UPLOADS_DIR,
           dataPath: DATA_DIR,
+          guestPortalPath: guestStore.portalPath,
+          guestRsvpHistoryPath: guestStore.rsvpHistoryPath,
+          guestSendJobsPath: guestStore.sendJobsPath,
         },
         authEnabled: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD),
       });
@@ -102,6 +122,185 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (pathname === "/api/admin/invitations" && req.method === "GET") {
+      if (!authorizeAdmin(req, res)) return;
+      return sendJson(res, 200, await guestStore.getAdminSnapshot({ baseUrl }));
+    }
+
+    if (pathname === "/api/admin/invitations" && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const group = await guestStore.createGroup(body);
+      return sendJson(res, 201, {
+        ok: true,
+        message: "Invitacion creada correctamente.",
+        group,
+      });
+    }
+
+    if (pathname === "/api/admin/invitations/meta" && req.method === "PATCH") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const snapshot = await guestStore.updateMeta(body);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Capacidad total actualizada.",
+        portal: snapshot,
+      });
+    }
+
+    if (pathname === "/api/admin/invitations/template.csv" && req.method === "GET") {
+      if (!authorizeAdmin(req, res)) return;
+      return sendText(res, 200, guestStore.getTemplateCsv(), "text/csv; charset=utf-8", {
+        "Content-Disposition": 'attachment; filename="guest-template.csv"',
+      });
+    }
+
+    if (pathname === "/api/admin/invitations/import" && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const result = await guestStore.importCsv(body.csvText || "");
+      return sendJson(res, 201, {
+        ok: true,
+        message: "Invitados importados correctamente.",
+        ...result,
+      });
+    }
+
+    if (pathname === "/api/admin/invitations/export.xlsx" && req.method === "GET") {
+      if (!authorizeAdmin(req, res)) return;
+      const buffer = await guestStore.exportWorkbook({ baseUrl });
+      return sendBuffer(
+        res,
+        200,
+        buffer,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        {
+          "Content-Disposition": 'attachment; filename="guest-list.xlsx"',
+        }
+      );
+    }
+
+    if (pathname === "/api/admin/invitations/send-bulk" && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const result = await guestStore.queueSendBulk(body.groupIds, { baseUrl });
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Envios agregados a la cola tecnica.",
+        ...result,
+      });
+    }
+
+    if (pathname === "/api/admin/send-jobs" && req.method === "GET") {
+      if (!authorizeAdmin(req, res)) return;
+      return sendJson(res, 200, {
+        jobs: await guestStore.listSendJobs({ baseUrl }),
+      });
+    }
+
+    if (groupMatch && req.method === "PATCH") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const group = await guestStore.updateGroup(groupMatch[1], body);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Invitacion actualizada correctamente.",
+        group,
+      });
+    }
+
+    if (groupMatch && req.method === "DELETE") {
+      if (!authorizeAdmin(req, res)) return;
+      const result = await guestStore.deleteGroup(groupMatch[1]);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Invitacion eliminada correctamente.",
+        ...result,
+      });
+    }
+
+    if (membersMatch && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const group = await guestStore.addMember(membersMatch[1], body);
+      return sendJson(res, 201, {
+        ok: true,
+        message: "Integrante agregado correctamente.",
+        group,
+      });
+    }
+
+    if (memberMatch && req.method === "PATCH") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req);
+      const group = await guestStore.updateMember(memberMatch[1], memberMatch[2], body);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Integrante actualizado correctamente.",
+        group,
+      });
+    }
+
+    if (memberMatch && req.method === "DELETE") {
+      if (!authorizeAdmin(req, res)) return;
+      const group = await guestStore.removeMember(memberMatch[1], memberMatch[2]);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Integrante eliminado correctamente.",
+        group,
+      });
+    }
+
+    if (sendMatch && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const result = await guestStore.queueSend(sendMatch[1], { baseUrl });
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Invitacion agregada a la cola tecnica de envio.",
+        ...result,
+      });
+    }
+
+    if (reopenMatch && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const result = await guestStore.reopenRsvp(reopenMatch[1]);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "RSVP reabierto correctamente.",
+        ...result,
+      });
+    }
+
+    if (sendJobMatch && req.method === "POST") {
+      if (!authorizeAdmin(req, res)) return;
+      const body = await readJsonBody(req).catch(() => ({}));
+      const result = await guestStore.markSendJob(sendJobMatch[1], sendJobMatch[2], body);
+      return sendJson(res, 200, {
+        ok: true,
+        message:
+          sendJobMatch[2] === "sent"
+            ? "Envio marcado como enviado."
+            : "Envio marcado como fallido.",
+        ...result,
+      });
+    }
+
+    if (inviteMatch && req.method === "GET") {
+      const config = buildPublicConfig(await configStore.load());
+      const invitation = await guestStore.getInvite(inviteMatch[1], { baseUrl });
+      return sendJson(res, 200, {
+        config,
+        invitation,
+      });
+    }
+
+    if (inviteRsvpMatch && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const result = await guestStore.submitInviteResponse(inviteRsvpMatch[1], body);
+      return sendJson(res, 200, result);
+    }
+
     if (pathname === "/api/rsvp" && req.method === "POST") {
       const body = await readJsonBody(req);
       const result = await persistRsvp(body);
@@ -114,6 +313,16 @@ const server = createServer(async (req, res) => {
 
     if (pathname === "/admin" || pathname === "/admin.html") {
       if (!authorizeAdmin(req, res)) return;
+      return serveStaticFile(res, path.join(PUBLIC_DIR, "admin.html"));
+    }
+
+    if (pathname === "/admin/invitation") {
+      if (!authorizeAdmin(req, res)) return;
+      return serveStaticFile(res, path.join(PUBLIC_DIR, "admin-invitation.html"));
+    }
+
+    if (pathname.startsWith("/invite/") && req.method === "GET") {
+      return serveStaticFile(res, path.join(PUBLIC_DIR, "invite.html"));
     }
 
     if (STATIC_FILE_MAP[pathname]) {
@@ -123,10 +332,7 @@ const server = createServer(async (req, res) => {
     return serveStaticFile(res, path.join(PUBLIC_DIR, "index.html"));
   } catch (error) {
     console.error(error);
-    sendJson(res, 500, {
-      error: "internal_server_error",
-      message: "No fue posible procesar la solicitud.",
-    });
+    return sendKnownError(res, error);
   }
 });
 
@@ -173,6 +379,11 @@ function buildPublicConfig(config) {
       cards: config.timeline.items.slice(0, 3),
     },
   };
+}
+
+function getRequestBaseUrl(req) {
+  const protocol = req.headers["x-forwarded-proto"] || "http";
+  return `${protocol}://${req.headers.host}`;
 }
 
 function authorizeAdmin(req, res) {
@@ -291,12 +502,12 @@ async function persistUpload(req) {
 }
 
 async function readJsonBody(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const raw = Buffer.concat(chunks).toString("utf8") || "{}";
-  return JSON.parse(raw);
+  const raw = await readRequestText(req);
+  return JSON.parse(raw || "{}");
+}
+
+async function readRequestText(req) {
+  return (await readRequestBuffer(req)).toString("utf8");
 }
 
 async function readRequestBuffer(req) {
@@ -349,7 +560,12 @@ function trimMultipartSection(buffer) {
   let end = buffer.length;
 
   while (start < end && (buffer[start] === 13 || buffer[start] === 10)) start += 1;
-  while (end > start && (buffer[end - 1] === 13 || buffer[end - 1] === 10 || buffer[end - 1] === 45)) end -= 1;
+  while (
+    end > start &&
+    (buffer[end - 1] === 13 || buffer[end - 1] === 10 || buffer[end - 1] === 45)
+  ) {
+    end -= 1;
+  }
 
   return buffer.subarray(start, end);
 }
@@ -400,6 +616,7 @@ async function serveStaticFile(res, filePath) {
       extension === ".html" || extension === ".js" || extension === ".css"
         ? "no-store, no-cache, must-revalidate"
         : "public, max-age=300";
+
     res.writeHead(200, {
       "Content-Type": MIME_TYPES[extension] || "application/octet-stream",
       "Cache-Control": cacheControl,
@@ -411,9 +628,70 @@ async function serveStaticFile(res, filePath) {
   }
 }
 
-function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+function sendJson(res, statusCode, payload, headers = {}) {
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    ...headers,
+  });
   res.end(JSON.stringify(payload));
+}
+
+function sendText(res, statusCode, payload, contentType = "text/plain; charset=utf-8", headers = {}) {
+  res.writeHead(statusCode, {
+    "Content-Type": contentType,
+    ...headers,
+  });
+  res.end(payload);
+}
+
+function sendBuffer(res, statusCode, payload, contentType, headers = {}) {
+  res.writeHead(statusCode, {
+    "Content-Type": contentType,
+    "Content-Length": payload.length,
+    ...headers,
+  });
+  res.end(payload);
+}
+
+function sendKnownError(res, error) {
+  if (
+    error?.code === "invite_not_found" ||
+    error?.code === "guest_group_not_found" ||
+    error?.code === "guest_member_not_found" ||
+    error?.code === "send_job_not_found"
+  ) {
+    return sendJson(res, 404, {
+      error: error.code,
+      message: error.message,
+    });
+  }
+
+  if (
+    error?.code === "invite_locked" ||
+    error?.code === "csv_header_invalid" ||
+    error?.code === "csv_empty" ||
+    error?.code === "csv_primary_invalid" ||
+    error?.code === "guest_member_required" ||
+    error?.code === "invite_payload_invalid"
+  ) {
+    const statusCode = error.code === "invite_locked" ? 409 : 400;
+    return sendJson(res, statusCode, {
+      error: error.code,
+      message: error.message,
+    });
+  }
+
+  if (error instanceof SyntaxError) {
+    return sendJson(res, 400, {
+      error: "invalid_json",
+      message: "El cuerpo JSON de la solicitud no es valido.",
+    });
+  }
+
+  return sendJson(res, 500, {
+    error: "internal_server_error",
+    message: "No fue posible procesar la solicitud.",
+  });
 }
 
 function safeJoin(basePath, relativePath) {

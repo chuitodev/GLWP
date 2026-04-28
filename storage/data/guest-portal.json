@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "eventCodePrefix": "AC",
+  "nextInvitationSequence": 3,
+  "totalCapacity": 150,
+  "groups": [
+    {
+      "id": "group_30549d2a-798b-47cb-8989-b4b8b7cfdaae",
+      "invitationCode": "AC001",
+      "publicToken": "7xS6ji9WMX_BQ4dlkt5Nph8H",
+      "familyLabel": "Familia Garcia Lopez",
+      "eventCodePrefix": "AC",
+      "sequence": 1,
+      "contact": {
+        "countryCode": "",
+        "phoneNumber": "",
+        "phoneE164": ""
+      },
+      "delivery": {
+        "status": "queued",
+        "lastQueuedAt": "2026-04-20T15:31:14.350Z",
+        "lastSentAt": "",
+        "lastFailedAt": "",
+        "lastJobId": "job_396eccd5-cacc-444f-abe6-5987027cfa74"
+      },
+      "rsvp": {
+        "status": "confirmed",
+        "lockedAt": "2026-04-21T03:57:16.749Z",
+        "reopenedAt": "2026-04-21T03:56:55.840Z",
+        "latestSubmissionId": "rsvp_a3a27713-b580-44e2-a974-74563dcc5dfb",
+        "latestSubmittedAt": "2026-04-21T03:57:16.749Z",
+        "summary": {
+          "attendingCount": 2,
+          "declinedCount": 1,
+          "respondedCount": 3,
+          "note": "",
+          "guests": [
+            {
+              "memberId": "member_09d3e635-eeb0-4dd9-8a1a-a9220864e4a1",
+              "displayName": "Ana Garcia",
+              "attendance": "yes",
+              "dietaryRestriction": "No, ninguna"
+            },
+            {
+              "memberId": "member_45a4862a-45f0-4002-b146-f786c71c2737",
+              "displayName": "Luis Lopez",
+              "attendance": "no",
+              "dietaryRestriction": ""
+            },
+            {
+              "memberId": "member_734116b2-8604-4bef-9b4d-fb0962d92cd4",
+              "displayName": "Invitado adicional 1",
+              "attendance": "yes",
+              "dietaryRestriction": "No, ninguna"
+            }
+          ]
+        }
+      },
+      "members": [
+        {
+          "id": "member_09d3e635-eeb0-4dd9-8a1a-a9220864e4a1",
+          "role": "primary",
+          "firstName": "Ana",
+          "lastNamePaternal": "Garcia",
+          "lastNameMaternal": "",
+          "displayName": "Ana Garcia",
+          "anonymousPlusOne": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "member_45a4862a-45f0-4002-b146-f786c71c2737",
+          "role": "plus_one",
+          "firstName": "Luis",
+          "lastNamePaternal": "Lopez",
+          "lastNameMaternal": "",
+          "displayName": "Luis Lopez",
+          "anonymousPlusOne": false,
+          "sortOrder": 1
+        },
+        {
+          "id": "member_734116b2-8604-4bef-9b4d-fb0962d92cd4",
+          "role": "plus_one",
+          "firstName": "",
+          "lastNamePaternal": "",
+          "lastNameMaternal": "",
+          "displayName": "Invitado adicional 1",
+          "anonymousPlusOne": true,
+          "sortOrder": 2
+        }
+      ],
+      "createdAt": "2026-04-20T14:02:28.061Z",
+      "updatedAt": "2026-04-21T03:57:16.749Z"
+    },
+    {
+      "id": "group_dae8774a-700d-4354-8469-8612a192fc6d",
+      "invitationCode": "AC002",
+      "publicToken": "",
+      "familyLabel": "rgerg",
+      "eventCodePrefix": "AC",
+      "sequence": 2,
+      "contact": {
+        "countryCode": "+52",
+        "phoneNumber": "52875275",
+        "phoneE164": "+5252875275"
+      },
+      "delivery": {
+        "status": "not_sent",
+        "lastQueuedAt": "",
+        "lastSentAt": "",
+        "lastFailedAt": "",
+        "lastJobId": ""
+      },
+      "rsvp": {
+        "status": "pending",
+        "lockedAt": "",
+        "reopenedAt": "",
+        "latestSubmissionId": "",
+        "latestSubmittedAt": "",
+        "summary": null
+      },
+      "members": [
+        {
+          "id": "member_6c79993e-9e61-437c-af45-07be82b28819",
+          "role": "primary",
+          "firstName": "trfbrtrtbr",
+          "lastNamePaternal": "ergerg",
+          "lastNameMaternal": "ergerg",
+          "displayName": "trfbrtrtbr ergerg ergerg",
+          "anonymousPlusOne": false,
+          "sortOrder": 0
+        },
+        {
+          "id": "member_2b79403b-5635-4592-b4dc-795b15d049d3",
+          "role": "plus_one",
+          "firstName": "",
+          "lastNamePaternal": "",
+          "lastNameMaternal": "",
+          "displayName": "Invitado adicional 1",
+          "anonymousPlusOne": true,
+          "sortOrder": 1
+        }
+      ],
+      "createdAt": "2026-04-20T15:29:40.959Z",
+      "updatedAt": "2026-04-20T15:29:50.330Z"
+    }
+  ]
+}

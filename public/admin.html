@@ -3,43 +3,289 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Panel de administracion | Invitacion</title>
+    <title>Portal de administracion | Invitados</title>
     <meta
       name="description"
-      content="Panel interno para editar el contenido persistente de la invitacion."
+      content="Portal administrativo para gestionar invitados, envios y la invitacion editable."
     />
-    <link rel="stylesheet" href="./styles.css?v=20260419b" />
-    <link rel="stylesheet" href="./admin.css?v=20260419b" />
+    <link rel="stylesheet" href="/styles.css?v=20260420a" />
+    <link rel="stylesheet" href="/admin.css?v=20260420a" />
   </head>
-  <body class="admin-body">
-    <div class="admin-shell">
-      <header class="admin-topbar">
+  <body class="admin-portal-body">
+    <div class="admin-portal-shell">
+      <header class="workspace-topbar">
         <div>
-          <div class="eyebrow">CMS interno</div>
-          <h1>Editor de invitacion</h1>
-          <p class="admin-topbar__copy">Pensado para wedding planners y equipos que quieren editar sin tocar codigo.</p>
+          <div class="eyebrow">Golden Light Weddings</div>
+          <h1>Portal de invitados</h1>
+          <p class="workspace-topbar__copy">
+            Gestiona grupos, acompanantes, envios y respuestas persistentes desde un solo lugar.
+          </p>
         </div>
-        <div class="admin-topbar__actions">
-          <a class="button button--secondary" href="/" target="_blank" rel="noreferrer">Abrir invitacion</a>
-          <button class="button button--ghost-dark" id="reset-seed" type="button">
-            Restaurar semilla
+        <div class="workspace-topbar__actions">
+          <a class="button button--secondary" href="/" target="_blank" rel="noreferrer"
+            >Abrir preview</a
+          >
+          <button class="button button--ghost-dark" id="refresh-admin" type="button">
+            Actualizar
           </button>
-          <button class="button" id="save-config" type="button">Guardar cambios</button>
         </div>
       </header>
 
-      <main class="admin-main">
-        <aside class="admin-sidebar">
-          <nav class="admin-nav" id="admin-nav"></nav>
-        </aside>
-        <section class="admin-content">
-          <div class="admin-status" id="admin-status">Cargando configuracion del editor...</div>
-          <section class="admin-preview" id="admin-preview"></section>
-          <form id="admin-form" class="admin-form"></form>
+      <div class="admin-status" id="admin-status">Cargando portal de invitados...</div>
+
+      <nav class="workspace-tabs" aria-label="Secciones del panel">
+        <button class="workspace-tab is-active" type="button" data-view-tab="guests">
+          Invitados
+        </button>
+        <button class="workspace-tab" type="button" data-view-tab="invitation">
+          Invitacion
+        </button>
+      </nav>
+
+      <main class="workspace-main">
+        <section class="workspace-view is-active" id="view-guests" data-view="guests">
+          <section class="guests-panel">
+            <div class="guests-panel__header">
+              <div>
+                <div class="eyebrow">Operacion</div>
+                <h2>Lista de invitados</h2>
+                <p>
+                  Un codigo visible por invitacion, un enlace privado por grupo y seguimiento
+                  persistente para RSVP y envios.
+                </p>
+              </div>
+              <div class="capacity-box">
+                <label for="total-capacity">Capacidad total</label>
+                <div class="capacity-box__controls">
+                  <input id="total-capacity" type="number" min="0" placeholder="0" />
+                  <button class="button button--secondary" id="save-capacity" type="button">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <section class="toolbar-panel">
+              <div class="toolbar-panel__actions">
+                <button class="button" id="add-group" type="button">Agregar invitado</button>
+                <button class="button button--secondary" id="toggle-filters" type="button">
+                  Filtrar
+                </button>
+                <button class="button button--secondary" id="import-csv" type="button">
+                  Importar
+                </button>
+                <a class="button button--secondary" href="/api/admin/invitations/export.xlsx"
+                  >Exportar</a
+                >
+                <a
+                  class="button button--secondary"
+                  href="/api/admin/invitations/template.csv"
+                  download
+                  >Descargar plantilla</a
+                >
+                <button class="button button--secondary" id="send-selected" type="button">
+                  Enviar seleccionados
+                </button>
+              </div>
+              <div class="toolbar-panel__summary" id="selection-summary">
+                Ninguna invitacion seleccionada.
+              </div>
+              <input class="is-hidden" id="csv-input" type="file" accept=".csv,text/csv" />
+            </section>
+
+            <section class="filters-panel" id="filters-panel">
+              <div class="filters-grid">
+                <label class="filter-field">
+                  <span>Busqueda libre</span>
+                  <input id="filter-query" type="search" placeholder="Nombre, telefono o codigo" />
+                </label>
+                <label class="filter-field">
+                  <span>Estado</span>
+                  <select id="filter-status">
+                    <option value="all">Todos</option>
+                    <option value="not_sent">No enviado</option>
+                    <option value="queued">En cola</option>
+                    <option value="sent">Enviado</option>
+                    <option value="confirmed">Confirmado</option>
+                    <option value="declined">No asiste</option>
+                    <option value="failed">Envio con error</option>
+                  </select>
+                </label>
+                <label class="filter-field">
+                  <span>Apellido</span>
+                  <input id="filter-lastname" type="search" placeholder="Perez" />
+                </label>
+                <label class="filter-field">
+                  <span>Familia</span>
+                  <input id="filter-family" type="search" placeholder="Familia Perez" />
+                </label>
+                <label class="filter-field">
+                  <span>Codigo</span>
+                  <input id="filter-code" type="search" placeholder="AC001" />
+                </label>
+              </div>
+            </section>
+
+            <section class="metric-grid" id="metrics-grid"></section>
+
+            <section class="table-panel">
+              <div class="table-panel__header">
+                <div>
+                  <div class="eyebrow">Seguimiento</div>
+                  <h3>Invitaciones por grupo</h3>
+                </div>
+                <div class="table-panel__meta" id="table-meta"></div>
+              </div>
+              <div class="table-panel__body" id="guest-table"></div>
+            </section>
+
+            <section class="jobs-panel">
+              <div class="table-panel__header">
+                <div>
+                  <div class="eyebrow">Orquestacion</div>
+                  <h3>Cola tecnica de envio</h3>
+                </div>
+                <p>
+                  Estos jobs quedan persistidos para que despues los consuma n8n, Zapier o cualquier
+                  orquestador externo.
+                </p>
+              </div>
+              <div class="jobs-list" id="job-list"></div>
+            </section>
+          </section>
+        </section>
+
+        <section class="workspace-view" id="view-invitation" data-view="invitation">
+          <section class="invitation-panel">
+            <div class="table-panel__header">
+              <div>
+                <div class="eyebrow">Micrositio</div>
+                <h2>Invitacion</h2>
+              </div>
+              <p>
+                El editor completo se conserva aqui para mantener textos, imagenes y secciones del
+                micrositio.
+              </p>
+            </div>
+            <iframe
+              class="invitation-frame"
+              id="invitation-frame"
+              src="/admin/invitation"
+              title="Editor de invitacion"
+            ></iframe>
+          </section>
         </section>
       </main>
     </div>
 
-    <script type="module" src="./admin.js?v=20260419b"></script>
+    <dialog class="admin-dialog" id="group-dialog">
+      <form class="dialog-form" id="group-form" method="dialog">
+        <div class="dialog-head">
+          <div>
+            <div class="eyebrow">Grupo</div>
+            <h3 id="group-dialog-title">Nueva invitacion</h3>
+          </div>
+          <button class="button button--secondary" type="button" data-close-dialog="group-dialog">
+            Cerrar
+          </button>
+        </div>
+
+        <div class="dialog-grid">
+          <label class="filter-field">
+            <span>Familia</span>
+            <input id="group-family-label" type="text" placeholder="Familia Perez Lopez" />
+          </label>
+          <label class="filter-field">
+            <span>Lada</span>
+            <input id="group-country-code" type="text" placeholder="+52" />
+          </label>
+          <label class="filter-field">
+            <span>Telefono</span>
+            <input id="group-phone-number" type="text" placeholder="8112345678" />
+          </label>
+          <label class="filter-field">
+            <span>E.164 derivado</span>
+            <input id="group-phone-e164" type="text" readonly />
+          </label>
+          <label class="filter-field">
+            <span>Nombre principal</span>
+            <input id="group-primary-first-name" type="text" placeholder="Juan" />
+          </label>
+          <label class="filter-field">
+            <span>Apellido paterno</span>
+            <input id="group-primary-lastname" type="text" placeholder="Perez" />
+          </label>
+          <label class="filter-field">
+            <span>Apellido materno</span>
+            <input id="group-primary-second-lastname" type="text" placeholder="Lopez" />
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="button button--secondary" type="button" data-close-dialog="group-dialog">
+            Cancelar
+          </button>
+          <button class="button" id="save-group" type="submit">Guardar invitacion</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="admin-dialog" id="member-dialog">
+      <form class="dialog-form" id="member-form" method="dialog">
+        <div class="dialog-head">
+          <div>
+            <div class="eyebrow">Integrante</div>
+            <h3 id="member-dialog-title">Nuevo acompanante</h3>
+          </div>
+          <button class="button button--secondary" type="button" data-close-dialog="member-dialog">
+            Cerrar
+          </button>
+        </div>
+
+        <label class="checkbox-field">
+          <input id="member-anonymous" type="checkbox" />
+          <span>Registrar como plus one anonimo</span>
+        </label>
+
+        <div class="dialog-grid">
+          <label class="filter-field">
+            <span>Nombre</span>
+            <input id="member-first-name" type="text" placeholder="Maria" />
+          </label>
+          <label class="filter-field">
+            <span>Apellido paterno</span>
+            <input id="member-lastname" type="text" placeholder="Rodriguez" />
+          </label>
+          <label class="filter-field">
+            <span>Apellido materno</span>
+            <input id="member-second-lastname" type="text" placeholder="Perez" />
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="button button--secondary" type="button" data-close-dialog="member-dialog">
+            Cancelar
+          </button>
+          <button class="button" id="save-member" type="submit">Guardar integrante</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="admin-dialog" id="detail-dialog">
+      <div class="dialog-form dialog-form--detail">
+        <div class="dialog-head">
+          <div>
+            <div class="eyebrow">Detalle</div>
+            <h3>Resumen de invitacion</h3>
+          </div>
+          <button class="button button--secondary" type="button" data-close-dialog="detail-dialog">
+            Cerrar
+          </button>
+        </div>
+        <div class="detail-content" id="detail-content"></div>
+      </div>
+    </dialog>
+
+    <script type="module" src="/admin.js?v=20260420a"></script>
   </body>
 </html>
